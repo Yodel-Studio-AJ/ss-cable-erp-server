@@ -10,3 +10,7 @@ export * from './companies/sub-company-users.relations';
 
 // products
 export * from './products/product-groups';
+
+// attendance
+export * from './attendance/attendance-records';
+export * from './attendance/attendance-settings';

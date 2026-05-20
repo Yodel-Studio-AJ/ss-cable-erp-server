@@ -39,13 +39,31 @@ async function userIdsForAdmin(subCompanyIds: string[]): Promise<string[]> {
 // ─── list ─────────────────────────────────────────────────────────────────────
 
 export async function getUsers(caller: AccessTokenPayload) {
+  let userRows;
   if (caller.role === 'owner') {
-    return db.select(userColumns).from(users);
+    userRows = await db.select(userColumns).from(users);
+  } else {
+    const ids = await userIdsForAdmin(caller.subCompanyIds);
+    if (ids.length === 0) return [];
+    userRows = await db.select(userColumns).from(users).where(inArray(users.id, ids));
   }
 
-  const ids = await userIdsForAdmin(caller.subCompanyIds);
-  if (ids.length === 0) return [];
-  return db.select(userColumns).from(users).where(inArray(users.id, ids));
+  if (userRows.length === 0) return [];
+
+  const userIds = userRows.map((u) => u.id);
+  const memberships = await db
+    .select({ userId: subCompanyUsers.userId, subCompanyId: subCompanyUsers.subCompanyId })
+    .from(subCompanyUsers)
+    .where(inArray(subCompanyUsers.userId, userIds));
+
+  const membershipMap = new Map<string, string[]>();
+  for (const m of memberships) {
+    const list = membershipMap.get(m.userId) ?? [];
+    list.push(m.subCompanyId);
+    membershipMap.set(m.userId, list);
+  }
+
+  return userRows.map((u) => ({ ...u, subCompanyIds: membershipMap.get(u.id) ?? [] }));
 }
 
 // ─── single ───────────────────────────────────────────────────────────────────
