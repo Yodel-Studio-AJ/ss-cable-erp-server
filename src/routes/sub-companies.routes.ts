@@ -10,7 +10,7 @@ const router = Router();
 router.use(requireAuth);
 
 // sub-company CRUD
-router.get('/',     requireRole('owner'), list);
+router.get('/',     requireRole('owner', 'admin'), list);
 router.get('/:id',  requireRole('owner', 'admin'), getById);
 router.post('/',    requireRole('owner'), create);
 router.patch('/:id', requireRole('owner'), update);

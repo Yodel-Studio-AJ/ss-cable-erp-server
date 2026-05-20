@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '../db/connection';
 import { subCompanies, subCompanyUsers, users } from '../db/schema';
 import { AppError } from '../lib/app-error';
@@ -108,16 +108,31 @@ export async function addUserToSubCompany(subCompanyId: string, input: AddUserTo
   const [existing] = await db
     .select()
     .from(subCompanyUsers)
-    .where(eq(subCompanyUsers.userId, input.userId))
+    .where(and(eq(subCompanyUsers.userId, input.userId), eq(subCompanyUsers.subCompanyId, subCompanyId)))
     .limit(1);
   if (existing) throw new AppError('User is already a member of this sub-company', 409);
 
-  const [created] = await db
+  await db
     .insert(subCompanyUsers)
-    .values({ subCompanyId, userId: input.userId, isPrimary: input.isPrimary })
-    .returning();
+    .values({ subCompanyId, userId: input.userId, isPrimary: input.isPrimary });
 
-  return created;
+  const [member] = await db
+    .select({
+      userId:      subCompanyUsers.userId,
+      isPrimary:   subCompanyUsers.isPrimary,
+      joinedAt:    subCompanyUsers.createdAt,
+      name:        users.name,
+      email:       users.email,
+      phoneNumber: users.phoneNumber,
+      role:        users.role,
+      isActive:    users.isActive,
+    })
+    .from(subCompanyUsers)
+    .innerJoin(users, eq(subCompanyUsers.userId, users.id))
+    .where(and(eq(subCompanyUsers.userId, input.userId), eq(subCompanyUsers.subCompanyId, subCompanyId)))
+    .limit(1);
+
+  return member;
 }
 
 export async function updateSubCompanyMembership(
@@ -128,18 +143,31 @@ export async function updateSubCompanyMembership(
   const [membership] = await db
     .select()
     .from(subCompanyUsers)
-    .where(eq(subCompanyUsers.userId, userId))
+    .where(and(eq(subCompanyUsers.userId, userId), eq(subCompanyUsers.subCompanyId, subCompanyId)))
     .limit(1);
 
-  if (!membership || membership.subCompanyId !== subCompanyId) {
-    throw new AppError('Membership not found', 404);
-  }
+  if (!membership) throw new AppError('Membership not found', 404);
 
-  const [updated] = await db
+  await db
     .update(subCompanyUsers)
     .set({ isPrimary })
-    .where(eq(subCompanyUsers.userId, userId))
-    .returning();
+    .where(and(eq(subCompanyUsers.userId, userId), eq(subCompanyUsers.subCompanyId, subCompanyId)));
+
+  const [updated] = await db
+    .select({
+      userId:      subCompanyUsers.userId,
+      isPrimary:   subCompanyUsers.isPrimary,
+      joinedAt:    subCompanyUsers.createdAt,
+      name:        users.name,
+      email:       users.email,
+      phoneNumber: users.phoneNumber,
+      role:        users.role,
+      isActive:    users.isActive,
+    })
+    .from(subCompanyUsers)
+    .innerJoin(users, eq(subCompanyUsers.userId, users.id))
+    .where(and(eq(subCompanyUsers.userId, userId), eq(subCompanyUsers.subCompanyId, subCompanyId)))
+    .limit(1);
 
   return updated;
 }
@@ -148,14 +176,12 @@ export async function removeUserFromSubCompany(subCompanyId: string, userId: str
   const [membership] = await db
     .select()
     .from(subCompanyUsers)
-    .where(eq(subCompanyUsers.userId, userId))
+    .where(and(eq(subCompanyUsers.userId, userId), eq(subCompanyUsers.subCompanyId, subCompanyId)))
     .limit(1);
 
-  if (!membership || membership.subCompanyId !== subCompanyId) {
-    throw new AppError('Membership not found', 404);
-  }
+  if (!membership) throw new AppError('Membership not found', 404);
 
   await db
     .delete(subCompanyUsers)
-    .where(eq(subCompanyUsers.userId, userId));
+    .where(and(eq(subCompanyUsers.userId, userId), eq(subCompanyUsers.subCompanyId, subCompanyId)));
 }

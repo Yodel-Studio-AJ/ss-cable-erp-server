@@ -8,6 +8,11 @@ export * from './companies/sub-companies.relations';
 export * from './companies/sub-company-users';
 export * from './companies/sub-company-users.relations';
 
+// parties
+export * from './parties/customers';
+export * from './parties/customer-contacts';
+export * from './parties/customers.relations';
+
 // products
 export * from './products/product-groups';
 
