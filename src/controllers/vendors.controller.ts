@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { z } from 'zod';
 import {
   getVendors, getVendorById, createVendor, updateVendor, deleteVendor,
-  setVendorProductGroups,
+  setVendorProductGroups, setVendorBranches,
 } from '../services/vendors.service';
 import { AppError } from '../lib/app-error';
 import type { AuthRequest } from '../middleware/auth.middleware';
@@ -33,6 +33,10 @@ const updateSchema = createSchema.partial().refine(
 
 const setProductGroupsSchema = z.object({
   productGroupIds: z.array(z.string().uuid()),
+});
+
+const setBranchesSchema = z.object({
+  branchIds: z.array(z.string().uuid()),
 });
 
 // ─── error handler ────────────────────────────────────────────────────────────
@@ -73,4 +77,10 @@ export async function updateProductGroups(req: AuthRequest, res: Response): Prom
   const parsed = setProductGroupsSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ message: 'productGroupIds must be an array of UUIDs' }); return; }
   try { res.json(await setVendorProductGroups(req.params.id, parsed.data.productGroupIds)); } catch (err) { handleError(res, err, 'updateProductGroups'); }
+}
+
+export async function updateBranches(req: AuthRequest, res: Response): Promise<void> {
+  const parsed = setBranchesSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ message: 'branchIds must be an array of UUIDs' }); return; }
+  try { res.json(await setVendorBranches(req.params.id, parsed.data.branchIds)); } catch (err) { handleError(res, err, 'updateBranches'); }
 }

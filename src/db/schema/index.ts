@@ -14,6 +14,7 @@ export * from './parties/customer-contacts';
 export * from './parties/customers.relations';
 export * from './parties/vendors';
 export * from './parties/vendor-product-groups';
+export * from './parties/vendor-branches';
 export * from './parties/vendors.relations';
 
 // products

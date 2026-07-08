@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { list, getById, create, update, remove, updateProductGroups } from '../controllers/vendors.controller';
+import { list, getById, create, update, remove, updateProductGroups, updateBranches } from '../controllers/vendors.controller';
 import { requireAuth, requireRole } from '../middleware/auth.middleware';
 
 const router = Router();
@@ -14,5 +14,8 @@ router.delete('/:id', requireRole('owner', 'admin'), remove);
 
 // product group assignments (replace all at once)
 router.put('/:id/product-groups', requireRole('owner', 'admin'), updateProductGroups);
+
+// branch assignments (replace all at once)
+router.put('/:id/branches', requireRole('owner', 'admin'), updateBranches);
 
 export default router;
