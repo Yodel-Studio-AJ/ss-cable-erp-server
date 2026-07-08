@@ -12,6 +12,9 @@ export * from './companies/sub-company-users.relations';
 export * from './parties/customers';
 export * from './parties/customer-contacts';
 export * from './parties/customers.relations';
+export * from './parties/vendors';
+export * from './parties/vendor-product-groups';
+export * from './parties/vendors.relations';
 
 // products
 export * from './products/product-groups';
