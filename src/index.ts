@@ -5,9 +5,12 @@ import apiRoutes from './routes';
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 3001);
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN ?? 'http://localhost:3000';
+const CLIENT_ORIGINS = (process.env.CLIENT_ORIGIN ?? 'http://localhost:3000')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
 
-app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
+app.use(cors({ origin: CLIENT_ORIGINS, credentials: true }));
 app.use(express.json());
 
 app.get('/health', (_req, res) => {
