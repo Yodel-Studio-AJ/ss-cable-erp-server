@@ -37,7 +37,7 @@ export interface CreateCustomerInput {
 export async function createCustomer(input: CreateCustomerInput, caller: AccessTokenPayload) {
   const [created] = await db
     .insert(customers)
-    .values({ ...input, createdByUserId: caller.userId })
+    .values({ ...input, createdByUserId: caller.sub })
     .returning();
   return created;
 }

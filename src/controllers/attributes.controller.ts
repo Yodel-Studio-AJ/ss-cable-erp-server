@@ -30,7 +30,7 @@ export async function list(_req: AuthRequest, res: Response): Promise<void> {
 }
 
 export async function getById(req: AuthRequest, res: Response): Promise<void> {
-  try { res.json(await getAttributeById(req.params.id)); } catch (err) { handleError(res, err, 'getById'); }
+  try { res.json(await getAttributeById(req.params.id as string)); } catch (err) { handleError(res, err, 'getById'); }
 }
 
 export async function create(req: AuthRequest, res: Response): Promise<void> {
@@ -42,9 +42,9 @@ export async function create(req: AuthRequest, res: Response): Promise<void> {
 export async function update(req: AuthRequest, res: Response): Promise<void> {
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ message: 'Invalid body', errors: parsed.error.flatten() }); return; }
-  try { res.json(await updateAttribute(req.params.id, parsed.data)); } catch (err) { handleError(res, err, 'update'); }
+  try { res.json(await updateAttribute(req.params.id as string, parsed.data)); } catch (err) { handleError(res, err, 'update'); }
 }
 
 export async function remove(req: AuthRequest, res: Response): Promise<void> {
-  try { await deleteAttribute(req.params.id); res.status(204).send(); } catch (err) { handleError(res, err, 'remove'); }
+  try { await deleteAttribute(req.params.id as string); res.status(204).send(); } catch (err) { handleError(res, err, 'remove'); }
 }

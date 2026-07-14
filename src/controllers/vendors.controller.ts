@@ -54,7 +54,7 @@ export async function list(_req: AuthRequest, res: Response): Promise<void> {
 }
 
 export async function getById(req: AuthRequest, res: Response): Promise<void> {
-  try { res.json(await getVendorById(req.params.id)); } catch (err) { handleError(res, err, 'getById'); }
+  try { res.json(await getVendorById(req.params.id as string)); } catch (err) { handleError(res, err, 'getById'); }
 }
 
 export async function create(req: AuthRequest, res: Response): Promise<void> {
@@ -66,21 +66,21 @@ export async function create(req: AuthRequest, res: Response): Promise<void> {
 export async function update(req: AuthRequest, res: Response): Promise<void> {
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ message: 'Invalid request body', errors: parsed.error.flatten() }); return; }
-  try { res.json(await updateVendor(req.params.id, parsed.data)); } catch (err) { handleError(res, err, 'update'); }
+  try { res.json(await updateVendor(req.params.id as string, parsed.data)); } catch (err) { handleError(res, err, 'update'); }
 }
 
 export async function remove(req: AuthRequest, res: Response): Promise<void> {
-  try { await deleteVendor(req.params.id); res.status(204).send(); } catch (err) { handleError(res, err, 'remove'); }
+  try { await deleteVendor(req.params.id as string); res.status(204).send(); } catch (err) { handleError(res, err, 'remove'); }
 }
 
 export async function updateProductGroups(req: AuthRequest, res: Response): Promise<void> {
   const parsed = setProductGroupsSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ message: 'productGroupIds must be an array of UUIDs' }); return; }
-  try { res.json(await setVendorProductGroups(req.params.id, parsed.data.productGroupIds)); } catch (err) { handleError(res, err, 'updateProductGroups'); }
+  try { res.json(await setVendorProductGroups(req.params.id as string, parsed.data.productGroupIds)); } catch (err) { handleError(res, err, 'updateProductGroups'); }
 }
 
 export async function updateBranches(req: AuthRequest, res: Response): Promise<void> {
   const parsed = setBranchesSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ message: 'branchIds must be an array of UUIDs' }); return; }
-  try { res.json(await setVendorBranches(req.params.id, parsed.data.branchIds)); } catch (err) { handleError(res, err, 'updateBranches'); }
+  try { res.json(await setVendorBranches(req.params.id as string, parsed.data.branchIds)); } catch (err) { handleError(res, err, 'updateBranches'); }
 }

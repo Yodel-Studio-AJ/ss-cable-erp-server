@@ -84,7 +84,7 @@ export interface CreateVendorInput {
 export async function createVendor(input: CreateVendorInput, caller: AccessTokenPayload) {
   const [created] = await db
     .insert(vendors)
-    .values({ ...input, createdByUserId: caller.userId })
+    .values({ ...input, createdByUserId: caller.sub })
     .returning();
   return { ...created, productGroupIds: [], branchIds: [] };
 }

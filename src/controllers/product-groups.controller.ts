@@ -84,27 +84,27 @@ const reorderSchema = z.object({
 // ─── group-attribute handlers ─────────────────────────────────────────────────
 
 export async function listGroupAttrs(req: AuthRequest, res: Response): Promise<void> {
-  try { res.json(await getGroupAttributes(req.params.id)); } catch (err) { handleError(res, err, 'listGroupAttrs'); }
+  try { res.json(await getGroupAttributes(req.params.id as string)); } catch (err) { handleError(res, err, 'listGroupAttrs'); }
 }
 
 export async function addGroupAttr(req: AuthRequest, res: Response): Promise<void> {
   const parsed = addGroupAttrSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ message: 'Invalid body', errors: parsed.error.flatten() }); return; }
-  try { res.status(201).json(await addGroupAttribute(req.params.id, parsed.data)); } catch (err) { handleError(res, err, 'addGroupAttr'); }
+  try { res.status(201).json(await addGroupAttribute(req.params.id as string, parsed.data)); } catch (err) { handleError(res, err, 'addGroupAttr'); }
 }
 
 export async function updateGroupAttr(req: AuthRequest, res: Response): Promise<void> {
   const parsed = updateGroupAttrSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ message: 'Invalid body', errors: parsed.error.flatten() }); return; }
-  try { res.json(await updateGroupAttribute(req.params.id, req.params.pgaId, parsed.data)); } catch (err) { handleError(res, err, 'updateGroupAttr'); }
+  try { res.json(await updateGroupAttribute(req.params.id as string, req.params.pgaId as string, parsed.data)); } catch (err) { handleError(res, err, 'updateGroupAttr'); }
 }
 
 export async function removeGroupAttr(req: AuthRequest, res: Response): Promise<void> {
-  try { await removeGroupAttribute(req.params.id, req.params.pgaId); res.status(204).send(); } catch (err) { handleError(res, err, 'removeGroupAttr'); }
+  try { await removeGroupAttribute(req.params.id as string, req.params.pgaId as string); res.status(204).send(); } catch (err) { handleError(res, err, 'removeGroupAttr'); }
 }
 
 export async function reorderGroupAttrs(req: AuthRequest, res: Response): Promise<void> {
   const parsed = reorderSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ message: 'orderedIds must be an array of UUIDs' }); return; }
-  try { res.json(await reorderGroupAttributes(req.params.id, parsed.data.orderedIds)); } catch (err) { handleError(res, err, 'reorderGroupAttrs'); }
+  try { res.json(await reorderGroupAttributes(req.params.id as string, parsed.data.orderedIds)); } catch (err) { handleError(res, err, 'reorderGroupAttrs'); }
 }

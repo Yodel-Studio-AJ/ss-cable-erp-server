@@ -53,7 +53,7 @@ export async function list(_req: AuthRequest, res: Response): Promise<void> {
 }
 
 export async function getById(req: AuthRequest, res: Response): Promise<void> {
-  try { res.json(await getCustomerById(req.params.id)); } catch (err) { handleError(res, err, 'getById'); }
+  try { res.json(await getCustomerById(req.params.id as string)); } catch (err) { handleError(res, err, 'getById'); }
 }
 
 export async function create(req: AuthRequest, res: Response): Promise<void> {
@@ -65,31 +65,31 @@ export async function create(req: AuthRequest, res: Response): Promise<void> {
 export async function update(req: AuthRequest, res: Response): Promise<void> {
   const parsed = customerUpdateSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ message: 'Invalid request body', errors: parsed.error.flatten() }); return; }
-  try { res.json(await updateCustomer(req.params.id, parsed.data)); } catch (err) { handleError(res, err, 'update'); }
+  try { res.json(await updateCustomer(req.params.id as string, parsed.data)); } catch (err) { handleError(res, err, 'update'); }
 }
 
 export async function remove(req: AuthRequest, res: Response): Promise<void> {
-  try { await deleteCustomer(req.params.id); res.status(204).send(); } catch (err) { handleError(res, err, 'remove'); }
+  try { await deleteCustomer(req.params.id as string); res.status(204).send(); } catch (err) { handleError(res, err, 'remove'); }
 }
 
 // ─── contact handlers ─────────────────────────────────────────────────────────
 
 export async function listContacts(req: AuthRequest, res: Response): Promise<void> {
-  try { res.json(await getContacts(req.params.id)); } catch (err) { handleError(res, err, 'listContacts'); }
+  try { res.json(await getContacts(req.params.id as string)); } catch (err) { handleError(res, err, 'listContacts'); }
 }
 
 export async function createContact(req: AuthRequest, res: Response): Promise<void> {
   const parsed = contactCreateSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ message: 'Invalid request body', errors: parsed.error.flatten() }); return; }
-  try { res.status(201).json(await addContact(req.params.id, parsed.data)); } catch (err) { handleError(res, err, 'createContact'); }
+  try { res.status(201).json(await addContact(req.params.id as string, parsed.data)); } catch (err) { handleError(res, err, 'createContact'); }
 }
 
 export async function updateContactHandler(req: AuthRequest, res: Response): Promise<void> {
   const parsed = contactUpdateSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ message: 'Invalid request body', errors: parsed.error.flatten() }); return; }
-  try { res.json(await updateContact(req.params.contactId, parsed.data)); } catch (err) { handleError(res, err, 'updateContact'); }
+  try { res.json(await updateContact(req.params.contactId as string, parsed.data)); } catch (err) { handleError(res, err, 'updateContact'); }
 }
 
 export async function removeContact(req: AuthRequest, res: Response): Promise<void> {
-  try { await deleteContact(req.params.contactId); res.status(204).send(); } catch (err) { handleError(res, err, 'removeContact'); }
+  try { await deleteContact(req.params.contactId as string); res.status(204).send(); } catch (err) { handleError(res, err, 'removeContact'); }
 }
