@@ -1,6 +1,6 @@
-import { eq } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 import { db } from '../db/connection';
-import { productGroups } from '../db/schema';
+import { productGroups, productGroupAttributes, attributes } from '../db/schema';
 import { AppError } from '../lib/app-error';
 
 // ─── types ────────────────────────────────────────────────────────────────────
@@ -35,7 +35,8 @@ export async function getProductGroups() {
 export async function getProductGroupById(id: string) {
   const [pg] = await db.select().from(productGroups).where(eq(productGroups.id, id)).limit(1);
   if (!pg) throw new AppError('Product group not found', 404);
-  return pg;
+  const attrs = await getGroupAttributes(id);
+  return { ...pg, attributes: attrs };
 }
 
 // ─── create ───────────────────────────────────────────────────────────────────
@@ -62,4 +63,157 @@ export async function updateProductGroup(id: string, input: UpdateProductGroupIn
 export async function deleteProductGroup(id: string) {
   await assertExists(id);
   await db.delete(productGroups).where(eq(productGroups.id, id));
+}
+
+// ─── group attributes ─────────────────────────────────────────────────────────
+
+export async function getGroupAttributes(productGroupId: string) {
+  const rows = await db
+    .select({
+      id:             productGroupAttributes.id,
+      productGroupId: productGroupAttributes.productGroupId,
+      attributeId:    productGroupAttributes.attributeId,
+      formulaAlias:   productGroupAttributes.formulaAlias,
+      isCalculated:   productGroupAttributes.isCalculated,
+      formula:        productGroupAttributes.formula,
+      isQuantityBasis: productGroupAttributes.isQuantityBasis,
+      sortOrder:      productGroupAttributes.sortOrder,
+      createdAt:      productGroupAttributes.createdAt,
+      // joined attribute fields
+      attrName:     attributes.name,
+      attrUnit:     attributes.unit,
+      attrDataType: attributes.dataType,
+    })
+    .from(productGroupAttributes)
+    .innerJoin(attributes, eq(productGroupAttributes.attributeId, attributes.id))
+    .where(eq(productGroupAttributes.productGroupId, productGroupId))
+    .orderBy(asc(productGroupAttributes.sortOrder), asc(productGroupAttributes.createdAt));
+
+  return rows.map((r) => ({
+    id:             r.id,
+    productGroupId: r.productGroupId,
+    attributeId:    r.attributeId,
+    formulaAlias:   r.formulaAlias,
+    isCalculated:   r.isCalculated,
+    formula:        r.formula,
+    isQuantityBasis: r.isQuantityBasis,
+    sortOrder:      r.sortOrder,
+    createdAt:      r.createdAt,
+    attribute: {
+      id:       r.attributeId,
+      name:     r.attrName,
+      unit:     r.attrUnit,
+      dataType: r.attrDataType,
+    },
+  }));
+}
+
+export interface AddGroupAttributeInput {
+  attributeId:     string;
+  formulaAlias?:   string;
+  isCalculated?:   boolean;
+  formula?:        string;
+  isQuantityBasis?: boolean;
+  sortOrder?:      number;
+}
+
+export async function addGroupAttribute(productGroupId: string, input: AddGroupAttributeInput) {
+  await assertExists(productGroupId);
+
+  // If setting as quantity basis, clear the flag on all other attrs in the group first
+  if (input.isQuantityBasis) {
+    await db
+      .update(productGroupAttributes)
+      .set({ isQuantityBasis: false })
+      .where(eq(productGroupAttributes.productGroupId, productGroupId));
+  }
+
+  let created: typeof productGroupAttributes.$inferSelect;
+  try {
+    [created] = await db
+      .insert(productGroupAttributes)
+      .values({
+        productGroupId,
+        attributeId:     input.attributeId,
+        formulaAlias:    input.formulaAlias ?? null,
+        isCalculated:    input.isCalculated ?? false,
+        formula:         input.formula ?? null,
+        isQuantityBasis: input.isQuantityBasis ?? false,
+        sortOrder:       input.sortOrder ?? 0,
+      })
+      .returning();
+  } catch (err: any) {
+    // Postgres unique-constraint violation (23505)
+    if (err?.code === '23505') {
+      throw new AppError('This attribute is already added to the group.', 409);
+    }
+    throw err;
+  }
+
+  const [full] = await getGroupAttributes(productGroupId).then((rows) =>
+    rows.filter((r) => r.id === created!.id)
+  );
+  return full;
+}
+
+export interface UpdateGroupAttributeInput {
+  formulaAlias?:   string | null;
+  isCalculated?:   boolean;
+  formula?:        string | null;
+  isQuantityBasis?: boolean;
+  sortOrder?:      number;
+}
+
+export async function updateGroupAttribute(
+  productGroupId: string,
+  pgaId: string,
+  input: UpdateGroupAttributeInput,
+) {
+  const [existing] = await db
+    .select({ id: productGroupAttributes.id })
+    .from(productGroupAttributes)
+    .where(eq(productGroupAttributes.id, pgaId))
+    .limit(1);
+  if (!existing) throw new AppError('Group attribute not found', 404);
+
+  // If setting as quantity basis, clear the flag on all other attrs in the group first
+  if (input.isQuantityBasis) {
+    await db
+      .update(productGroupAttributes)
+      .set({ isQuantityBasis: false })
+      .where(eq(productGroupAttributes.productGroupId, productGroupId));
+  }
+
+  await db
+    .update(productGroupAttributes)
+    .set(input)
+    .where(eq(productGroupAttributes.id, pgaId));
+
+  const [updated] = await getGroupAttributes(productGroupId).then((rows) =>
+    rows.filter((r) => r.id === pgaId)
+  );
+  return updated;
+}
+
+export async function removeGroupAttribute(productGroupId: string, pgaId: string) {
+  const [existing] = await db
+    .select({ id: productGroupAttributes.id })
+    .from(productGroupAttributes)
+    .where(eq(productGroupAttributes.id, pgaId))
+    .limit(1);
+  if (!existing) throw new AppError('Group attribute not found', 404);
+  await db.delete(productGroupAttributes).where(eq(productGroupAttributes.id, pgaId));
+}
+
+export async function reorderGroupAttributes(productGroupId: string, orderedIds: string[]) {
+  await assertExists(productGroupId);
+  await Promise.all(
+    orderedIds.map((id, index) =>
+      db
+        .update(productGroupAttributes)
+        .set({ sortOrder: index })
+        .where(eq(productGroupAttributes.id, id))
+    )
+  );
+  return getGroupAttributes(productGroupId);
 }

@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { z } from 'zod';
 import {
   getProductGroups, getProductGroupById, createProductGroup, updateProductGroup, deleteProductGroup,
+  getGroupAttributes, addGroupAttribute, updateGroupAttribute, removeGroupAttribute, reorderGroupAttributes,
 } from '../services/product-groups.service';
 import { AppError } from '../lib/app-error';
 import type { AuthRequest } from '../middleware/auth.middleware';
@@ -55,4 +56,55 @@ export async function update(req: AuthRequest, res: Response): Promise<void> {
 
 export async function remove(req: AuthRequest, res: Response): Promise<void> {
   try { await deleteProductGroup(req.params.id as string); res.status(204).send(); } catch (err) { handleError(res, err, 'remove'); }
+}
+
+// ─── group-attribute schemas ──────────────────────────────────────────────────
+
+const addGroupAttrSchema = z.object({
+  attributeId:     z.string().uuid(),
+  formulaAlias:    z.string().max(50).optional(),
+  isCalculated:    z.boolean().default(false),
+  formula:         z.string().optional(),
+  isQuantityBasis: z.boolean().default(false),
+  sortOrder:       z.number().int().default(0),
+});
+
+const updateGroupAttrSchema = z.object({
+  formulaAlias:    z.string().max(50).nullable().optional(),
+  isCalculated:    z.boolean().optional(),
+  formula:         z.string().nullable().optional(),
+  isQuantityBasis: z.boolean().optional(),
+  sortOrder:       z.number().int().optional(),
+}).refine((d) => Object.keys(d).length > 0, { message: 'At least one field required' });
+
+const reorderSchema = z.object({
+  orderedIds: z.array(z.string().uuid()),
+});
+
+// ─── group-attribute handlers ─────────────────────────────────────────────────
+
+export async function listGroupAttrs(req: AuthRequest, res: Response): Promise<void> {
+  try { res.json(await getGroupAttributes(req.params.id)); } catch (err) { handleError(res, err, 'listGroupAttrs'); }
+}
+
+export async function addGroupAttr(req: AuthRequest, res: Response): Promise<void> {
+  const parsed = addGroupAttrSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ message: 'Invalid body', errors: parsed.error.flatten() }); return; }
+  try { res.status(201).json(await addGroupAttribute(req.params.id, parsed.data)); } catch (err) { handleError(res, err, 'addGroupAttr'); }
+}
+
+export async function updateGroupAttr(req: AuthRequest, res: Response): Promise<void> {
+  const parsed = updateGroupAttrSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ message: 'Invalid body', errors: parsed.error.flatten() }); return; }
+  try { res.json(await updateGroupAttribute(req.params.id, req.params.pgaId, parsed.data)); } catch (err) { handleError(res, err, 'updateGroupAttr'); }
+}
+
+export async function removeGroupAttr(req: AuthRequest, res: Response): Promise<void> {
+  try { await removeGroupAttribute(req.params.id, req.params.pgaId); res.status(204).send(); } catch (err) { handleError(res, err, 'removeGroupAttr'); }
+}
+
+export async function reorderGroupAttrs(req: AuthRequest, res: Response): Promise<void> {
+  const parsed = reorderSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ message: 'orderedIds must be an array of UUIDs' }); return; }
+  try { res.json(await reorderGroupAttributes(req.params.id, parsed.data.orderedIds)); } catch (err) { handleError(res, err, 'reorderGroupAttrs'); }
 }

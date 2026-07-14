@@ -1,15 +1,26 @@
 import { Router } from 'express';
-import { list, getById, create, update, remove } from '../controllers/product-groups.controller';
+import {
+  list, getById, create, update, remove,
+  listGroupAttrs, addGroupAttr, updateGroupAttr, removeGroupAttr, reorderGroupAttrs,
+} from '../controllers/product-groups.controller';
 import { requireAuth, requireRole } from '../middleware/auth.middleware';
 
 const router = Router();
 
 router.use(requireAuth);
 
-router.get('/',     list);
-router.get('/:id',  getById);
-router.post('/',    requireRole('owner', 'admin'), create);
+// product group CRUD
+router.get('/',      list);
+router.get('/:id',   getById);
+router.post('/',     requireRole('owner', 'admin'), create);
 router.patch('/:id', requireRole('owner', 'admin'), update);
 router.delete('/:id', requireRole('owner'), remove);
+
+// group-attribute management
+router.get   ('/:id/attributes',              listGroupAttrs);
+router.post  ('/:id/attributes',              requireRole('owner', 'admin'), addGroupAttr);
+router.patch ('/:id/attributes/:pgaId',       requireRole('owner', 'admin'), updateGroupAttr);
+router.delete('/:id/attributes/:pgaId',       requireRole('owner', 'admin'), removeGroupAttr);
+router.put   ('/:id/attributes/reorder',      requireRole('owner', 'admin'), reorderGroupAttrs);
 
 export default router;

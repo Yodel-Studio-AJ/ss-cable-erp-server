@@ -19,6 +19,9 @@ export * from './parties/vendors.relations';
 
 // products
 export * from './products/product-groups';
+export * from './products/attributes';
+export * from './products/product-group-attributes';
+export * from './products/product-group-attributes.relations';
 
 // attendance
 export * from './attendance/attendance-records';
