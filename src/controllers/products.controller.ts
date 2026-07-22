@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { z } from 'zod';
 import {
-  listAllProducts, listProducts, getProductById, createProduct, updateProduct, deleteProduct,
+  listAllProducts, listProducts, getProductById, getProductWithGroup, createProduct, updateProduct, deleteProduct,
 } from '../services/products.service';
 import { AppError } from '../lib/app-error';
 import type { AuthRequest } from '../middleware/auth.middleware';
@@ -39,6 +39,11 @@ function handleError(res: Response, err: unknown, ctx: string): void {
 export async function listAllHandler(_req: AuthRequest, res: Response): Promise<void> {
   try { res.json(await listAllProducts()); }
   catch (err) { handleError(res, err, 'listAll'); }
+}
+
+export async function getByIdGlobalHandler(req: AuthRequest, res: Response): Promise<void> {
+  try { res.json(await getProductWithGroup(req.params.id as string)); }
+  catch (err) { handleError(res, err, 'getByIdGlobal'); }
 }
 
 export async function listHandler(req: AuthRequest, res: Response): Promise<void> {

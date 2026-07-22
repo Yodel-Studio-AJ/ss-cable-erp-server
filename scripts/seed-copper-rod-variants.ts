@@ -5,69 +5,73 @@ dotenv.config();
 const sql = postgres(process.env.DATABASE_URL!);
 
 async function main() {
-  // Find copper rod group
-  const groups = await sql`SELECT id, name FROM product_groups ORDER BY name`;
-  console.log('Product groups:', groups.map(g => `${g.name} (${g.id})`).join('\n'));
+  const GROUP_ID = '0d24e634-18e7-487c-a596-d9f1e7bc94d0'; // Copper Rods
 
-  const copperRod = groups.find(g => g.name.toLowerCase().includes('copper rod'));
-  if (!copperRod) {
-    console.error('Copper rod group not found. Available groups listed above.');
-    await sql.end();
-    return;
-  }
-  console.log('\nFound:', copperRod.name, copperRod.id);
-
-  // Get its attributes
+  // Get attributes with full info
   const attrs = await sql`
-    SELECT pga.id, pga.formula_alias, pga.is_quantity_basis, pga.is_calculated, pga.is_from_input,
-           a.name, a.unit, a.data_type
+    SELECT pga.id as pga_id, pga.formula_alias, pga.is_quantity_basis,
+           pga.is_calculated, pga.is_from_input,
+           a.name as attr_name, a.unit, a.data_type
     FROM product_group_attributes pga
     JOIN attributes a ON a.id = pga.attribute_id
-    WHERE pga.product_group_id = ${copperRod.id}
+    WHERE pga.product_group_id = ${GROUP_ID}
     ORDER BY pga.sort_order
   `;
-  console.log('\nAttributes:');
-  attrs.forEach(a => console.log(` - ${a.name} (${a.unit ?? '—'}) alias=${a.formula_alias} qty_basis=${a.is_quantity_basis}`));
 
-  // Identify qty-basis attr (e.g. cross section area)
-  const qtyBasis = attrs.find(a => a.is_quantity_basis);
-  const simpleAttrs = attrs.filter(a => !a.is_calculated && !a.is_from_input);
+  console.log('Attributes:');
+  attrs.forEach(a => console.log(` [${a.formula_alias}] ${a.attr_name} (${a.unit}) calc=${a.is_calculated}`));
 
-  console.log('\nQty basis attr:', qtyBasis?.name ?? 'none');
+  // Map alias → pga_id
+  const byAlias: Record<string, string> = {};
+  for (const a of attrs) if (a.formula_alias) byAlias[a.formula_alias] = a.pga_id;
 
-  // --- Variant 1: 8 sq mm copper rod ---
-  const variant1Name = '8 mm² Copper Rod';
-  const variant1Sku  = 'CR-8MM2';
+  console.log('\nAlias map:', byAlias);
 
-  // --- Variant 2: 10 sq mm copper rod ---
-  const variant2Name = '10 mm² Copper Rod';
-  const variant2Sku  = 'CR-10MM2';
+  // Delete existing variants we created before
+  await sql`DELETE FROM products WHERE product_group_id = ${GROUP_ID}`;
+  console.log('\nCleared old variants.');
 
-  // Default numeric values — adjust if your group has different attributes
-  // We'll set: qty-basis = 8 or 10, everything else null (user can fill later)
-  for (const [varName, varSku, qtyVal] of [
-    [variant1Name, variant1Sku, 8],
-    [variant2Name, variant2Sku, 10],
-  ] as const) {
-    // Insert product
+  // Copper rod density (standard: 8960 kg/m³)
+  const DENSITY = 8960;
+
+  // Variant definitions: name, sku, cross_section_mm2, length_m
+  // Weight = density * cross_section * length / 1_000_000 kg
+  const variants = [
+    { name: '8 mm² Copper Rod', sku: 'CR-8MM2',  xsec: 8,  len: 1000 },
+    { name: '10 mm² Copper Rod', sku: 'CR-10MM2', xsec: 10, len: 1000 },
+  ];
+
+  for (const v of variants) {
+    const weight = DENSITY * v.xsec * v.len / 1_000_000;
+
     const [product] = await sql`
       INSERT INTO products (product_group_id, name, sku, is_active)
-      VALUES (${copperRod.id}, ${varName}, ${varSku}, true)
-      ON CONFLICT (sku) DO UPDATE SET name = EXCLUDED.name
+      VALUES (${GROUP_ID}, ${v.name}, ${v.sku}, true)
       RETURNING id, name, sku
     `;
     console.log(`\nCreated: ${product.name} (${product.id})`);
 
-    // Insert qty-basis attribute value
-    if (qtyBasis) {
+    // Insert values for every non-from_input attr
+    const valuesToInsert: { pgaId: string; numericValue: number }[] = [];
+
+    if (byAlias['cross_section']) valuesToInsert.push({ pgaId: byAlias['cross_section'], numericValue: v.xsec });
+    if (byAlias['density'])       valuesToInsert.push({ pgaId: byAlias['density'],       numericValue: DENSITY });
+    if (byAlias['length'])        valuesToInsert.push({ pgaId: byAlias['length'],         numericValue: v.len });
+    // Weight only if it's not calculated
+    const weightAttr = attrs.find(a => a.formula_alias === 'weight');
+    if (weightAttr && !weightAttr.is_calculated && byAlias['weight']) {
+      valuesToInsert.push({ pgaId: byAlias['weight'], numericValue: weight });
+    }
+
+    for (const val of valuesToInsert) {
       await sql`
         INSERT INTO product_attribute_values (product_id, product_group_attribute_id, numeric_value)
-        VALUES (${product.id}, ${qtyBasis.id}, ${qtyVal})
-        ON CONFLICT (product_id, product_group_attribute_id)
-        DO UPDATE SET numeric_value = EXCLUDED.numeric_value
+        VALUES (${product.id}, ${val.pgaId}, ${val.numericValue})
       `;
-      console.log(`  ${qtyBasis.name} = ${qtyVal} ${qtyBasis.unit ?? ''}`);
+      const attrName = attrs.find(a => a.pga_id === val.pgaId)?.attr_name;
+      console.log(`  ${attrName} = ${val.numericValue}`);
     }
+    console.log(`  Weight (computed) ≈ ${weight.toFixed(4)} kg`);
   }
 
   console.log('\nDone!');

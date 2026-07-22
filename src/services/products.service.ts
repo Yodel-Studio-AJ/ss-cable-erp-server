@@ -1,6 +1,6 @@
-import { eq, asc, desc } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 import { db } from '../db/connection';
-import { products, productAttributeValues, productGroups } from '../db/schema';
+import { products, productAttributeValues, productGroups, productGroupAttributes, attributes } from '../db/schema';
 import { AppError } from '../lib/app-error';
 
 // ─── types ────────────────────────────────────────────────────────────────────
@@ -123,6 +123,61 @@ export async function listAllProducts() {
   }
 
   return Array.from(productMap.values());
+}
+
+// ─── get single product (global, no group context needed) ────────────────────
+
+export async function getProductWithGroup(productId: string) {
+  const rows = await db
+    .select({
+      id:              products.id,
+      productGroupId:  products.productGroupId,
+      groupName:       productGroups.name,
+      name:            products.name,
+      sku:             products.sku,
+      description:     products.description,
+      isActive:        products.isActive,
+      createdAt:       products.createdAt,
+      updatedAt:       products.updatedAt,
+      pavId:           productAttributeValues.id,
+      pgaId:           productAttributeValues.productGroupAttributeId,
+      numericValue:    productAttributeValues.numericValue,
+      textValue:       productAttributeValues.textValue,
+      attrName:        attributes.name,
+      attrUnit:        attributes.unit,
+      isQuantityBasis: productGroupAttributes.isQuantityBasis,
+      isCalculated:    productGroupAttributes.isCalculated,
+      isFromInput:     productGroupAttributes.isFromInput,
+      sortOrder:       productGroupAttributes.sortOrder,
+    })
+    .from(products)
+    .innerJoin(productGroups, eq(products.productGroupId, productGroups.id))
+    .leftJoin(productAttributeValues, eq(productAttributeValues.productId, products.id))
+    .leftJoin(productGroupAttributes, eq(productGroupAttributes.id, productAttributeValues.productGroupAttributeId))
+    .leftJoin(attributes, eq(attributes.id, productGroupAttributes.attributeId))
+    .where(eq(products.id, productId));
+
+  if (rows.length === 0) throw new AppError('Product not found', 404);
+  const first = rows[0];
+  return {
+    id: first.id, productGroupId: first.productGroupId, groupName: first.groupName,
+    name: first.name, sku: first.sku, description: first.description,
+    isActive: first.isActive, createdAt: first.createdAt, updatedAt: first.updatedAt,
+    attributeValues: rows
+      .filter(r => r.pavId)
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+      .map(r => ({
+        id:                      r.pavId!,
+        productGroupAttributeId: r.pgaId!,
+        numericValue:            r.numericValue,
+        textValue:               r.textValue,
+        attrName:                r.attrName,
+        attrUnit:                r.attrUnit,
+        isQuantityBasis:         r.isQuantityBasis,
+        isCalculated:            r.isCalculated,
+        isFromInput:             r.isFromInput,
+      })),
+  };
 }
 
 // ─── list by group ────────────────────────────────────────────────────────────
