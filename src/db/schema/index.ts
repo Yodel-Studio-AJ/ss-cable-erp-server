@@ -22,6 +22,7 @@ export * from './products/product-groups';
 export * from './products/attributes';
 export * from './products/product-group-attributes';
 export * from './products/product-group-attributes.relations';
+export * from './products/product-group-inputs';
 
 // attendance
 export * from './attendance/attendance-records';

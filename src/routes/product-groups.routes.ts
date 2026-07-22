@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   list, getById, create, update, remove,
   listGroupAttrs, addGroupAttr, updateGroupAttr, removeGroupAttr, reorderGroupAttrs,
+  listGroupInputs, addGroupInputHandler, updateGroupInputHandler, removeGroupInputHandler,
 } from '../controllers/product-groups.controller';
 import { requireAuth, requireRole } from '../middleware/auth.middleware';
 
@@ -22,5 +23,11 @@ router.post  ('/:id/attributes',              requireRole('owner', 'admin'), add
 router.patch ('/:id/attributes/:pgaId',       requireRole('owner', 'admin'), updateGroupAttr);
 router.delete('/:id/attributes/:pgaId',       requireRole('owner', 'admin'), removeGroupAttr);
 router.put   ('/:id/attributes/reorder',      requireRole('owner', 'admin'), reorderGroupAttrs);
+
+// BOM inputs (what this group consumes to be produced)
+router.get   ('/:id/inputs',                  listGroupInputs);
+router.post  ('/:id/inputs',                  requireRole('owner', 'admin'), addGroupInputHandler);
+router.patch ('/:id/inputs/:inputId',         requireRole('owner', 'admin'), updateGroupInputHandler);
+router.delete('/:id/inputs/:inputId',         requireRole('owner', 'admin'), removeGroupInputHandler);
 
 export default router;

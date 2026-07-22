@@ -1,6 +1,6 @@
 import { eq, asc } from 'drizzle-orm';
 import { db } from '../db/connection';
-import { productGroups, productGroupAttributes, attributes } from '../db/schema';
+import { productGroups, productGroupAttributes, attributes, productGroupInputs } from '../db/schema';
 import { AppError } from '../lib/app-error';
 
 // ─── types ────────────────────────────────────────────────────────────────────
@@ -216,4 +216,143 @@ export async function reorderGroupAttributes(productGroupId: string, orderedIds:
     )
   );
   return getGroupAttributes(productGroupId);
+}
+
+// ─── BOM inputs ───────────────────────────────────────────────────────────────
+
+export async function getGroupInputs(outputGroupId: string) {
+  const rows = await db
+    .select({
+      id:            productGroupInputs.id,
+      outputGroupId: productGroupInputs.outputGroupId,
+      inputGroupId:  productGroupInputs.inputGroupId,
+      qtyFormula:    productGroupInputs.qtyFormula,
+      formulaVars:   productGroupInputs.formulaVars,
+      yieldFactor:   productGroupInputs.yieldFactor,
+      label:         productGroupInputs.label,
+      sortOrder:     productGroupInputs.sortOrder,
+      notes:         productGroupInputs.notes,
+      createdAt:     productGroupInputs.createdAt,
+      inputGroupName: productGroups.name,
+      inputGroupType: productGroups.type,
+    })
+    .from(productGroupInputs)
+    .innerJoin(productGroups, eq(productGroupInputs.inputGroupId, productGroups.id))
+    .where(eq(productGroupInputs.outputGroupId, outputGroupId))
+    .orderBy(asc(productGroupInputs.sortOrder), asc(productGroupInputs.createdAt));
+
+  return rows.map((r) => ({
+    id:            r.id,
+    outputGroupId: r.outputGroupId,
+    inputGroupId:  r.inputGroupId,
+    qtyFormula:    r.qtyFormula,
+    formulaVars:   r.formulaVars as Record<string, { pgaId: string; groupId: string; groupName: string; attrName: string }> | null,
+    yieldFactor:   r.yieldFactor,
+    label:         r.label,
+    sortOrder:     r.sortOrder,
+    notes:         r.notes,
+    createdAt:     r.createdAt,
+    inputGroup: {
+      id:   r.inputGroupId,
+      name: r.inputGroupName,
+      type: r.inputGroupType,
+    },
+  }));
+}
+
+export interface FormulaVar {
+  pgaId:     string;
+  groupId:   string;
+  groupName: string;
+  attrName:  string;
+}
+
+export interface AddGroupInputInput {
+  inputGroupId: string;
+  qtyFormula:   string;
+  formulaVars?: Record<string, FormulaVar>;
+  yieldFactor?: number;
+  label?:       string;
+  sortOrder?:   number;
+  notes?:       string;
+}
+
+export async function addGroupInput(outputGroupId: string, input: AddGroupInputInput) {
+  await assertExists(outputGroupId);
+  // verify the input group exists
+  const [inputGroup] = await db
+    .select({ id: productGroups.id })
+    .from(productGroups)
+    .where(eq(productGroups.id, input.inputGroupId))
+    .limit(1);
+  if (!inputGroup) throw new AppError('Input product group not found', 404);
+  if (input.inputGroupId === outputGroupId) throw new AppError('A product group cannot be its own input', 400);
+
+  const [created] = await db
+    .insert(productGroupInputs)
+    .values({
+      outputGroupId,
+      inputGroupId:  input.inputGroupId,
+      qtyFormula:    input.qtyFormula,
+      formulaVars:   input.formulaVars ?? null,
+      yieldFactor:   String(input.yieldFactor ?? 1.0),
+      label:         input.label ?? null,
+      sortOrder:     input.sortOrder ?? 0,
+      notes:         input.notes ?? null,
+    })
+    .returning();
+
+  const [full] = await getGroupInputs(outputGroupId).then((rows) =>
+    rows.filter((r) => r.id === created.id)
+  );
+  return full;
+}
+
+export interface UpdateGroupInputInput {
+  qtyFormula?:   string;
+  formulaVars?:  Record<string, FormulaVar> | null;
+  yieldFactor?:  number;
+  label?:        string | null;
+  sortOrder?:    number;
+  notes?:        string | null;
+}
+
+export async function updateGroupInput(
+  outputGroupId: string,
+  inputId: string,
+  input: UpdateGroupInputInput,
+) {
+  const [existing] = await db
+    .select({ id: productGroupInputs.id })
+    .from(productGroupInputs)
+    .where(eq(productGroupInputs.id, inputId))
+    .limit(1);
+  if (!existing) throw new AppError('BOM input not found', 404);
+
+  await db
+    .update(productGroupInputs)
+    .set({
+      ...(input.qtyFormula  !== undefined && { qtyFormula:  input.qtyFormula }),
+      ...(input.formulaVars !== undefined && { formulaVars: input.formulaVars }),
+      ...(input.yieldFactor !== undefined && { yieldFactor: String(input.yieldFactor) }),
+      ...(input.label       !== undefined && { label:       input.label }),
+      ...(input.sortOrder   !== undefined && { sortOrder:   input.sortOrder }),
+      ...(input.notes       !== undefined && { notes:       input.notes }),
+    })
+    .where(eq(productGroupInputs.id, inputId));
+
+  const [updated] = await getGroupInputs(outputGroupId).then((rows) =>
+    rows.filter((r) => r.id === inputId)
+  );
+  return updated;
+}
+
+export async function removeGroupInput(inputId: string) {
+  const [existing] = await db
+    .select({ id: productGroupInputs.id })
+    .from(productGroupInputs)
+    .where(eq(productGroupInputs.id, inputId))
+    .limit(1);
+  if (!existing) throw new AppError('BOM input not found', 404);
+  await db.delete(productGroupInputs).where(eq(productGroupInputs.id, inputId));
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "product_group_inputs" ADD COLUMN "formula_vars" jsonb;

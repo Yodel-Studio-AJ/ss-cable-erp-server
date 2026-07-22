@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   getProductGroups, getProductGroupById, createProductGroup, updateProductGroup, deleteProductGroup,
   getGroupAttributes, addGroupAttribute, updateGroupAttribute, removeGroupAttribute, reorderGroupAttributes,
+  getGroupInputs, addGroupInput, updateGroupInput, removeGroupInput,
 } from '../services/product-groups.service';
 import { AppError } from '../lib/app-error';
 import type { AuthRequest } from '../middleware/auth.middleware';
@@ -107,4 +108,54 @@ export async function reorderGroupAttrs(req: AuthRequest, res: Response): Promis
   const parsed = reorderSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ message: 'orderedIds must be an array of UUIDs' }); return; }
   try { res.json(await reorderGroupAttributes(req.params.id as string, parsed.data.orderedIds)); } catch (err) { handleError(res, err, 'reorderGroupAttrs'); }
+}
+
+// ─── BOM input schemas ────────────────────────────────────────────────────────
+
+const formulaVarSchema = z.object({
+  pgaId:     z.string().uuid(),
+  groupId:   z.string().uuid(),
+  groupName: z.string(),
+  attrName:  z.string(),
+});
+
+const addGroupInputSchema = z.object({
+  inputGroupId: z.string().uuid(),
+  qtyFormula:   z.string().min(1),
+  formulaVars:  z.record(z.string(), formulaVarSchema).optional(),
+  yieldFactor:  z.number().positive().max(1).default(1.0),
+  label:        z.string().max(100).optional(),
+  sortOrder:    z.number().int().default(0),
+  notes:        z.string().optional(),
+});
+
+const updateGroupInputSchema = z.object({
+  qtyFormula:   z.string().min(1).optional(),
+  formulaVars:  z.record(z.string(), formulaVarSchema).nullable().optional(),
+  yieldFactor:  z.number().positive().max(1).optional(),
+  label:        z.string().max(100).nullable().optional(),
+  sortOrder:    z.number().int().optional(),
+  notes:        z.string().nullable().optional(),
+}).refine((d) => Object.keys(d).length > 0, { message: 'At least one field required' });
+
+// ─── BOM input handlers ───────────────────────────────────────────────────────
+
+export async function listGroupInputs(req: AuthRequest, res: Response): Promise<void> {
+  try { res.json(await getGroupInputs(req.params.id as string)); } catch (err) { handleError(res, err, 'listGroupInputs'); }
+}
+
+export async function addGroupInputHandler(req: AuthRequest, res: Response): Promise<void> {
+  const parsed = addGroupInputSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ message: 'Invalid body', errors: parsed.error.flatten() }); return; }
+  try { res.status(201).json(await addGroupInput(req.params.id as string, parsed.data)); } catch (err) { handleError(res, err, 'addGroupInput'); }
+}
+
+export async function updateGroupInputHandler(req: AuthRequest, res: Response): Promise<void> {
+  const parsed = updateGroupInputSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ message: 'Invalid body', errors: parsed.error.flatten() }); return; }
+  try { res.json(await updateGroupInput(req.params.id as string, req.params.inputId as string, parsed.data)); } catch (err) { handleError(res, err, 'updateGroupInput'); }
+}
+
+export async function removeGroupInputHandler(req: AuthRequest, res: Response): Promise<void> {
+  try { await removeGroupInput(req.params.inputId as string); res.status(204).send(); } catch (err) { handleError(res, err, 'removeGroupInput'); }
 }
