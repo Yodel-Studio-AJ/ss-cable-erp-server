@@ -23,6 +23,8 @@ export * from './products/attributes';
 export * from './products/product-group-attributes';
 export * from './products/product-group-attributes.relations';
 export * from './products/product-group-inputs';
+export * from './products/products';
+export * from './products/product-attribute-values';
 
 // attendance
 export * from './attendance/attendance-records';
