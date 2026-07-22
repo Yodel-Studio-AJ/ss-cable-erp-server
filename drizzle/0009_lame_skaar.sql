@@ -1,0 +1,3 @@
+ALTER TABLE "product_group_attributes" ADD COLUMN "is_from_input" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "product_group_attributes" ADD COLUMN "source_input_pga_id" uuid;--> statement-breakpoint
+ALTER TABLE "product_group_attributes" ADD CONSTRAINT "product_group_attributes_source_input_pga_id_product_group_attributes_id_fk" FOREIGN KEY ("source_input_pga_id") REFERENCES "public"."product_group_attributes"("id") ON DELETE set null ON UPDATE no action;

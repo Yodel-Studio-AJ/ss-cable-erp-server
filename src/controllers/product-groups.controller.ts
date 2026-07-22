@@ -59,6 +59,16 @@ export async function remove(req: AuthRequest, res: Response): Promise<void> {
   try { await deleteProductGroup(req.params.id as string); res.status(204).send(); } catch (err) { handleError(res, err, 'remove'); }
 }
 
+// ─── shared formula var schema (used by both group-attr and BOM input schemas) ─
+
+const formulaVarSchema = z.object({
+  pgaId:     z.string().uuid(),
+  groupId:   z.string().uuid(),
+  groupName: z.string(),
+  attrName:  z.string(),
+  alias:     z.string(),
+});
+
 // ─── group-attribute schemas ──────────────────────────────────────────────────
 
 const addGroupAttrSchema = z.object({
@@ -67,6 +77,8 @@ const addGroupAttrSchema = z.object({
   isCalculated:    z.boolean().default(false),
   formula:         z.string().optional(),
   isQuantityBasis: z.boolean().default(false),
+  isFromInput:     z.boolean().default(false),
+  formulaVars:     z.record(z.string(), formulaVarSchema).optional(),
   sortOrder:       z.number().int().default(0),
 });
 
@@ -75,6 +87,8 @@ const updateGroupAttrSchema = z.object({
   isCalculated:    z.boolean().optional(),
   formula:         z.string().nullable().optional(),
   isQuantityBasis: z.boolean().optional(),
+  isFromInput:     z.boolean().optional(),
+  formulaVars:     z.record(z.string(), formulaVarSchema).nullable().optional(),
   sortOrder:       z.number().int().optional(),
 }).refine((d) => Object.keys(d).length > 0, { message: 'At least one field required' });
 
@@ -111,13 +125,6 @@ export async function reorderGroupAttrs(req: AuthRequest, res: Response): Promis
 }
 
 // ─── BOM input schemas ────────────────────────────────────────────────────────
-
-const formulaVarSchema = z.object({
-  pgaId:     z.string().uuid(),
-  groupId:   z.string().uuid(),
-  groupName: z.string(),
-  attrName:  z.string(),
-});
 
 const addGroupInputSchema = z.object({
   inputGroupId: z.string().uuid(),

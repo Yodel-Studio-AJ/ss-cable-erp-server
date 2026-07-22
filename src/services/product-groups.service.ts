@@ -70,19 +70,20 @@ export async function deleteProductGroup(id: string) {
 export async function getGroupAttributes(productGroupId: string) {
   const rows = await db
     .select({
-      id:             productGroupAttributes.id,
-      productGroupId: productGroupAttributes.productGroupId,
-      attributeId:    productGroupAttributes.attributeId,
-      formulaAlias:   productGroupAttributes.formulaAlias,
-      isCalculated:   productGroupAttributes.isCalculated,
-      formula:        productGroupAttributes.formula,
+      id:              productGroupAttributes.id,
+      productGroupId:  productGroupAttributes.productGroupId,
+      attributeId:     productGroupAttributes.attributeId,
+      formulaAlias:    productGroupAttributes.formulaAlias,
+      isCalculated:    productGroupAttributes.isCalculated,
+      formula:         productGroupAttributes.formula,
       isQuantityBasis: productGroupAttributes.isQuantityBasis,
-      sortOrder:      productGroupAttributes.sortOrder,
-      createdAt:      productGroupAttributes.createdAt,
-      // joined attribute fields
-      attrName:     attributes.name,
-      attrUnit:     attributes.unit,
-      attrDataType: attributes.dataType,
+      isFromInput:     productGroupAttributes.isFromInput,
+      formulaVars:     productGroupAttributes.formulaVars,
+      sortOrder:       productGroupAttributes.sortOrder,
+      createdAt:       productGroupAttributes.createdAt,
+      attrName:        attributes.name,
+      attrUnit:        attributes.unit,
+      attrDataType:    attributes.dataType,
     })
     .from(productGroupAttributes)
     .innerJoin(attributes, eq(productGroupAttributes.attributeId, attributes.id))
@@ -90,15 +91,17 @@ export async function getGroupAttributes(productGroupId: string) {
     .orderBy(asc(productGroupAttributes.sortOrder), asc(productGroupAttributes.createdAt));
 
   return rows.map((r) => ({
-    id:             r.id,
-    productGroupId: r.productGroupId,
-    attributeId:    r.attributeId,
-    formulaAlias:   r.formulaAlias,
-    isCalculated:   r.isCalculated,
-    formula:        r.formula,
+    id:              r.id,
+    productGroupId:  r.productGroupId,
+    attributeId:     r.attributeId,
+    formulaAlias:    r.formulaAlias,
+    isCalculated:    r.isCalculated,
+    formula:         r.formula,
     isQuantityBasis: r.isQuantityBasis,
-    sortOrder:      r.sortOrder,
-    createdAt:      r.createdAt,
+    isFromInput:     r.isFromInput,
+    formulaVars:     r.formulaVars as Record<string, FormulaVar> | null,
+    sortOrder:       r.sortOrder,
+    createdAt:       r.createdAt,
     attribute: {
       id:       r.attributeId,
       name:     r.attrName,
@@ -109,18 +112,19 @@ export async function getGroupAttributes(productGroupId: string) {
 }
 
 export interface AddGroupAttributeInput {
-  attributeId:     string;
-  formulaAlias?:   string;
-  isCalculated?:   boolean;
-  formula?:        string;
+  attributeId:      string;
+  formulaAlias?:    string;
+  isCalculated?:    boolean;
+  formula?:         string;
   isQuantityBasis?: boolean;
-  sortOrder?:      number;
+  isFromInput?:     boolean;
+  formulaVars?:     Record<string, FormulaVar>;
+  sortOrder?:       number;
 }
 
 export async function addGroupAttribute(productGroupId: string, input: AddGroupAttributeInput) {
   await assertExists(productGroupId);
 
-  // If setting as quantity basis, clear the flag on all other attrs in the group first
   if (input.isQuantityBasis) {
     await db
       .update(productGroupAttributes)
@@ -139,14 +143,13 @@ export async function addGroupAttribute(productGroupId: string, input: AddGroupA
         isCalculated:    input.isCalculated ?? false,
         formula:         input.formula ?? null,
         isQuantityBasis: input.isQuantityBasis ?? false,
+        isFromInput:     input.isFromInput ?? false,
+        formulaVars:     input.formulaVars ?? null,
         sortOrder:       input.sortOrder ?? 0,
       })
       .returning();
   } catch (err: any) {
-    // Postgres unique-constraint violation (23505)
-    if (err?.code === '23505') {
-      throw new AppError('This attribute is already added to the group.', 409);
-    }
+    if (err?.code === '23505') throw new AppError('This attribute is already added to the group.', 409);
     throw err;
   }
 
@@ -157,11 +160,13 @@ export async function addGroupAttribute(productGroupId: string, input: AddGroupA
 }
 
 export interface UpdateGroupAttributeInput {
-  formulaAlias?:   string | null;
-  isCalculated?:   boolean;
-  formula?:        string | null;
+  formulaAlias?:    string | null;
+  isCalculated?:    boolean;
+  formula?:         string | null;
   isQuantityBasis?: boolean;
-  sortOrder?:      number;
+  isFromInput?:     boolean;
+  formulaVars?:     Record<string, FormulaVar> | null;
+  sortOrder?:       number;
 }
 
 export async function updateGroupAttribute(
@@ -176,7 +181,6 @@ export async function updateGroupAttribute(
     .limit(1);
   if (!existing) throw new AppError('Group attribute not found', 404);
 
-  // If setting as quantity basis, clear the flag on all other attrs in the group first
   if (input.isQuantityBasis) {
     await db
       .update(productGroupAttributes)
@@ -265,6 +269,7 @@ export interface FormulaVar {
   groupId:   string;
   groupName: string;
   attrName:  string;
+  alias:     string;  // display only — evaluation uses pgaId
 }
 
 export interface AddGroupInputInput {
