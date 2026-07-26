@@ -29,3 +29,11 @@ export * from './products/product-attribute-values';
 // attendance
 export * from './attendance/attendance-records';
 export * from './attendance/attendance-settings';
+
+// inventory
+export * from './inventory/product-stock';
+export * from './inventory/purchase-orders';
+export * from './inventory/purchase-order-items';
+export * from './inventory/stock-batches';
+export * from './inventory/product-pricing';
+export * from './inventory/product-price-history';

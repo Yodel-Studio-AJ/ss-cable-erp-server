@@ -7,18 +7,20 @@ import productsRoutes      from './products.routes';
 import attributesRoutes    from './attributes.routes';
 import attendanceRoutes    from './attendance.routes';
 import customersRoutes     from './customers.routes';
-import vendorsRoutes       from './vendors.routes';
+import vendorsRoutes        from './vendors.routes';
+import purchaseOrdersRoutes from './purchase-orders.routes';
 
 const router = Router();
 
-router.use('/auth',           authRoutes);
-router.use('/users',          usersRoutes);
-router.use('/sub-companies',  subCompaniesRoutes);
-router.use('/product-groups', productGroupsRoutes);
-router.use('/products',       productsRoutes);
-router.use('/attributes',     attributesRoutes);
-router.use('/attendance',     attendanceRoutes);
-router.use('/customers',      customersRoutes);
-router.use('/vendors',        vendorsRoutes);
+router.use('/auth',            authRoutes);
+router.use('/users',           usersRoutes);
+router.use('/sub-companies',   subCompaniesRoutes);
+router.use('/product-groups',  productGroupsRoutes);
+router.use('/products',        productsRoutes);
+router.use('/attributes',      attributesRoutes);
+router.use('/attendance',      attendanceRoutes);
+router.use('/customers',       customersRoutes);
+router.use('/vendors',         vendorsRoutes);
+router.use('/purchase-orders', purchaseOrdersRoutes);
 
 export default router;
