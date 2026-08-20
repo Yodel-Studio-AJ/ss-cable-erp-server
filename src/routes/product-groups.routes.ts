@@ -10,6 +10,7 @@ import {
   createHandler as createProduct,
   updateHandler as updateProduct,
   removeHandler as removeProduct,
+  getVariantInputsHandler,
 } from '../controllers/products.controller';
 import { requireAuth, requireRole } from '../middleware/auth.middleware';
 
@@ -40,8 +41,9 @@ router.delete('/:id/inputs/:inputId',         requireRole('owner', 'admin'), rem
 // Product variants for this group
 router.get   ('/:id/products',                listProducts);
 router.post  ('/:id/products',                requireRole('owner', 'admin'), createProduct);
-router.get   ('/:id/products/:productId',     getProductById);
-router.patch ('/:id/products/:productId',     requireRole('owner', 'admin'), updateProduct);
-router.delete('/:id/products/:productId',     requireRole('owner', 'admin'), removeProduct);
+router.get   ('/:id/products/:productId',              getProductById);
+router.patch ('/:id/products/:productId',              requireRole('owner', 'admin'), updateProduct);
+router.delete('/:id/products/:productId',              requireRole('owner', 'admin'), removeProduct);
+router.get   ('/:id/products/:productId/variant-inputs', getVariantInputsHandler);
 
 export default router;

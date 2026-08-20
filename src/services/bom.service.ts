@@ -1,8 +1,8 @@
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, and } from 'drizzle-orm';
 import { db } from '../db/connection';
 import {
   products, productGroups, productGroupAttributes, productGroupInputs,
-  productAttributeValues, attributes, productStock,
+  productAttributeValues, attributes, productStock, productVariantInputs,
 } from '../db/schema';
 import { AppError } from '../lib/app-error';
 import { deriveAlias, evalFormula, computeAttributeValues } from './products.service';
@@ -19,19 +19,31 @@ export interface BomCalculateInput {
 }
 
 // ─── load product with attributes + stock ────────────────────────────────────
+// Joins from productGroupAttributes outward so ALL group attrs appear,
+// even those with no stored productAttributeValues row (e.g. qty-basis attrs).
 
-async function loadProduct(productId: string) {
-  const rows = await db
+async function loadProduct(productId: string, qtyOverride?: number) {
+  const [productRow] = await db
     .select({
-      id:              products.id,
-      productGroupId:  products.productGroupId,
-      groupName:       productGroups.name,
-      name:            products.name,
-      sku:             products.sku,
-      pavId:           productAttributeValues.id,
-      pgaId:           productAttributeValues.productGroupAttributeId,
-      numericValue:    productAttributeValues.numericValue,
-      textValue:       productAttributeValues.textValue,
+      id:             products.id,
+      productGroupId: products.productGroupId,
+      groupName:      productGroups.name,
+      name:           products.name,
+      sku:            products.sku,
+      stockQty:       productStock.quantityOnHand,
+    })
+    .from(products)
+    .innerJoin(productGroups, eq(products.productGroupId, productGroups.id))
+    .leftJoin(productStock, eq(productStock.productId, products.id))
+    .where(eq(products.id, productId))
+    .limit(1);
+
+  if (!productRow) throw new AppError('Product not found', 404);
+
+  // All PGAs for this group, left-joined to stored values for this product
+  const attrRows = await db
+    .select({
+      pgaId:           productGroupAttributes.id,
       attrName:        attributes.name,
       attrUnit:        attributes.unit,
       isQuantityBasis: productGroupAttributes.isQuantityBasis,
@@ -40,49 +52,61 @@ async function loadProduct(productId: string) {
       formula:         productGroupAttributes.formula,
       formulaAlias:    productGroupAttributes.formulaAlias,
       sortOrder:       productGroupAttributes.sortOrder,
-      stockQty:        productStock.quantityOnHand,
+      pavId:           productAttributeValues.id,
+      numericValue:    productAttributeValues.numericValue,
+      textValue:       productAttributeValues.textValue,
     })
-    .from(products)
-    .innerJoin(productGroups, eq(products.productGroupId, productGroups.id))
-    .leftJoin(productAttributeValues, eq(productAttributeValues.productId, products.id))
-    .leftJoin(productGroupAttributes, eq(productGroupAttributes.id, productAttributeValues.productGroupAttributeId))
-    .leftJoin(attributes, eq(attributes.id, productGroupAttributes.attributeId))
-    .leftJoin(productStock, eq(productStock.productId, products.id))
-    .where(eq(products.id, productId));
+    .from(productGroupAttributes)
+    .innerJoin(attributes, eq(attributes.id, productGroupAttributes.attributeId))
+    .leftJoin(
+      productAttributeValues,
+      and(
+        eq(productAttributeValues.productGroupAttributeId, productGroupAttributes.id),
+        eq(productAttributeValues.productId, productId),
+      ),
+    )
+    .where(eq(productGroupAttributes.productGroupId, productRow.productGroupId))
+    .orderBy(asc(productGroupAttributes.sortOrder));
 
-  if (rows.length === 0) throw new AppError('Product not found', 404);
+  const stockQty = productRow.stockQty ?? 0;
 
-  const first    = rows[0];
-  const stockQty = first.stockQty ?? 0;
+  const rawAttrs = attrRows.map((r) => ({
+    id:                      r.pavId ?? `synthetic_${r.pgaId}`,
+    productGroupAttributeId: r.pgaId,
+    numericValue:            r.numericValue,
+    textValue:               r.textValue,
+    attrName:                r.attrName,
+    attrUnit:                r.attrUnit,
+    isQuantityBasis:         r.isQuantityBasis,
+    isCalculated:            r.isCalculated,
+    isFromInput:             r.isFromInput,
+    formula:                 r.formula,
+    formulaAlias:            r.formulaAlias,
+    sortOrder:               r.sortOrder,
+  }));
 
-  const rawAttrs = rows
-    .filter((r) => r.pavId)
-    .map((r) => ({
-      id:                      r.pavId!,
-      productGroupAttributeId: r.pgaId!,
-      numericValue:            r.numericValue,
-      textValue:               r.textValue,
-      attrName:                r.attrName,
-      attrUnit:                r.attrUnit,
-      isQuantityBasis:         r.isQuantityBasis,
-      isCalculated:            r.isCalculated,
-      isFromInput:             r.isFromInput,
-      formula:                 r.formula,
-      formulaAlias:            r.formulaAlias,
-      sortOrder:               r.sortOrder,
-    }));
+  // Keep formula on isFromInput attrs (needed by resolveFormula); strip from others
+  function buildAttributeValues(qty: number) {
+    return computeAttributeValues(rawAttrs, qty).map(
+      ({ formula, isFromInput, ...rest }) => ({
+        ...rest,
+        isFromInput,
+        formula: isFromInput ? formula : undefined,
+      }),
+    );
+  }
 
-  const attributeValues = computeAttributeValues(rawAttrs, stockQty).map(
-    ({ formula: _f, ...rest }) => rest,
-  );
+  const attributeValues = buildAttributeValues(stockQty);
 
   return {
-    id:             first.id,
-    productGroupId: first.productGroupId,
-    groupName:      first.groupName,
-    name:           first.name,
-    sku:            first.sku,
+    id:             productRow.id,
+    productGroupId: productRow.productGroupId,
+    groupName:      productRow.groupName,
+    name:           productRow.name,
+    sku:            productRow.sku,
     attributeValues,
+    // Allow recomputing attrs with a different qty (e.g. requiredQty at BOM time)
+    recomputeAttrs: (qty: number) => buildAttributeValues(qty),
   };
 }
 
@@ -119,23 +143,49 @@ function resolveFormula(
 ): { vars: Record<string, number>; humanFormula: string } {
   // Build pgaId → numeric value from both products.
   // For the output product's qty-basis attribute, override with the user-supplied outputQty.
+  // For the output product's isFromInput attributes, resolve their value from the input product
+  // by evaluating the isFromInput formula against the input product's attr values.
   const pgaValues: Record<string, number> = {};
 
-  for (const av of outputProduct.attributeValues) {
-    const val = av.isQuantityBasis ? outputQty : (av.computedValue ?? av.numericValue);
-    if (val != null) pgaValues[av.productGroupAttributeId] = val;
-  }
+  // First, build input pgaId → value map (simple + computed, but NOT qty_basis, because
+  // at BOM time the input's qty_basis is what we are solving for)
+  const inputPgaValues: Record<string, number> = {};
   for (const av of inputProduct.attributeValues) {
-    // Don't overwrite output's qty-basis with input's matching attr
-    if (!pgaValues[av.productGroupAttributeId]) {
+    if (av.isQuantityBasis) continue; // skip — this is the answer, not an input to the formula
+    const val = av.computedValue ?? av.numericValue;
+    if (val != null) inputPgaValues[av.productGroupAttributeId] = val;
+  }
+
+  // Process output product attrs, resolving isFromInput attrs from the input product
+  const tokenRegex = /\bpga_[0-9a-f_]+\b/g;
+  for (const av of outputProduct.attributeValues) {
+    if (av.isQuantityBasis) {
+      pgaValues[av.productGroupAttributeId] = outputQty;
+    } else if (av.isFromInput && av.formula) {
+      // Evaluate the isFromInput formula against input product values
+      const fromInputTokens = [...new Set(av.formula.match(tokenRegex) ?? [])];
+      const fromInputVars: Record<string, number> = {};
+      for (const tok of fromInputTokens) {
+        const uuid = uuidFromToken(tok.slice(4));
+        const val  = inputPgaValues[uuid];
+        if (val != null) fromInputVars[tok] = val;
+      }
+      const resolved = evalFormula(av.formula, fromInputVars);
+      if (resolved != null) pgaValues[av.productGroupAttributeId] = resolved;
+      else if (av.numericValue != null) pgaValues[av.productGroupAttributeId] = av.numericValue;
+    } else {
       const val = av.computedValue ?? av.numericValue;
       if (val != null) pgaValues[av.productGroupAttributeId] = val;
     }
   }
 
+  // Add all input product attrs (non-qty_basis) — don't overwrite output values
+  for (const [pgaId, val] of Object.entries(inputPgaValues)) {
+    if (!(pgaId in pgaValues)) pgaValues[pgaId] = val;
+  }
+
   // Extract pga_<token> patterns directly from the formula string.
   // Tokens use underscores: pga_8c59e7e7_9e1c_4e47_... → UUID 8c59e7e7-9e1c-4e47-...
-  const tokenRegex = /\bpga_[0-9a-f_]+\b/g;
   const tokens = [...new Set(formula.match(tokenRegex) ?? [])];
 
   const vars: Record<string, number> = {};
@@ -189,31 +239,107 @@ function uuidFromToken(raw: string): string {
   return raw.replace(/_/g, '-');
 }
 
-// ─── main calculation ─────────────────────────────────────────────────────────
+// ─── load saved variant inputs for a product ─────────────────────────────────
 
-export async function calculateBom(input: BomCalculateInput) {
-  const outputProduct = await loadProduct(input.outputProductId);
+async function loadSavedVariantInputs(productId: string) {
+  const rows = await db
+    .select({
+      productGroupInputId: productVariantInputs.productGroupInputId,
+      inputProductId:      productVariantInputs.inputProductId,
+    })
+    .from(productVariantInputs)
+    .where(eq(productVariantInputs.outputProductId, productId));
+  return rows;
+}
+
+// ─── single-level BOM calculation ────────────────────────────────────────────
+
+type InputResultBase = {
+  bomInputId:     string;
+  label:          string | null;
+  inputGroupId:   string;
+  inputGroupName: string;
+  qtyFormula:     string;
+  humanFormula:   string;
+  yieldFactor:    number;
+  notes:          string | null;
+  inputProduct: {
+    id:              string;
+    name:            string;
+    groupName:       string;
+    sku:             string | null;
+    attributeValues: ReturnType<typeof computeAttributeValues>;
+    qtyBasisAttr:    ReturnType<typeof computeAttributeValues>[number] | null;
+  };
+  baseQty:     number | null;
+  requiredQty: number | null;
+  error:       string | null;
+  subBom:      BomLevel | null;
+};
+
+export type BomLevel = {
+  outputProductId: string;
+  outputProduct: {
+    id:              string;
+    name:            string;
+    groupName:       string;
+    sku:             string | null;
+    attributeValues: ReturnType<typeof computeAttributeValues>;
+    qtyBasisAttr:    ReturnType<typeof computeAttributeValues>[number] | null;
+  };
+  outputQty:    number;
+  inputResults: InputResultBase[];
+};
+
+async function calculateBomLevel(
+  outputProductId: string,
+  outputQty:       number,
+  // explicit input selections (from caller); falls back to saved variant inputs if empty
+  inputSelections: { bomInputId: string; inputProductId: string }[],
+  depth:           number,  // to prevent infinite recursion
+): Promise<BomLevel> {
+  const outputProduct = await loadProduct(outputProductId);
   const bomInputRows  = await loadBomInputs(outputProduct.productGroupId);
+  const qtyBasisAv    = outputProduct.attributeValues.find((av) => av.isQuantityBasis);
 
-  const qtyBasisAv = outputProduct.attributeValues.find((av) => av.isQuantityBasis);
+  // Merge caller-supplied selections with saved variant inputs for any gaps
+  const savedSelections = await loadSavedVariantInputs(outputProductId);
+  const selectionMap: Record<string, string> = {};
+  for (const s of savedSelections)       selectionMap[s.productGroupInputId] = s.inputProductId;
+  for (const s of inputSelections)       selectionMap[s.bomInputId]          = s.inputProductId;
 
   const inputResults = await Promise.all(
-    input.inputs.map(async (sel) => {
-      const bomInput = bomInputRows.find((b) => b.id === sel.bomInputId);
-      if (!bomInput) return null;
+    bomInputRows.map(async (bomInput) => {
+      const inputProductId = selectionMap[bomInput.id];
+      if (!inputProductId) return null;
 
-      const inputProduct = await loadProduct(sel.inputProductId);
+      const inputProduct = await loadProduct(inputProductId);
 
       const { vars, humanFormula } = resolveFormula(
         bomInput.qtyFormula,
         outputProduct,
         inputProduct,
-        input.outputQty,
+        outputQty,
       );
 
-      const baseQty    = evalFormula(bomInput.qtyFormula, vars);
-      const yf         = parseFloat(bomInput.yieldFactor as string);
+      const baseQty     = evalFormula(bomInput.qtyFormula, vars);
+      const yf          = parseFloat(bomInput.yieldFactor as string);
       const requiredQty = baseQty != null && yf > 0 ? baseQty / yf : baseQty;
+
+      // Recompute input product attrs using requiredQty so calculated attrs
+      // (e.g. "Length of Rod" derived from weight) show actual required quantities.
+      const inputAttrsForResult = requiredQty != null
+        ? inputProduct.recomputeAttrs(requiredQty)
+        : inputProduct.attributeValues;
+
+      // Recursively compute sub-BOM for this input product (if it has BOM inputs)
+      let subBom: BomLevel | null = null;
+      if (depth < 5 && requiredQty != null) {
+        const subBomInputs = await loadBomInputs(inputProduct.productGroupId);
+        if (subBomInputs.length > 0) {
+          subBom = await calculateBomLevel(inputProductId, requiredQty, [], depth + 1);
+        }
+      }
 
       return {
         bomInputId:     bomInput.id,
@@ -225,35 +351,42 @@ export async function calculateBom(input: BomCalculateInput) {
         yieldFactor:    yf,
         notes:          bomInput.notes,
         inputProduct: {
-          id:             inputProduct.id,
-          name:           inputProduct.name,
-          groupName:      inputProduct.groupName,
-          sku:            inputProduct.sku,
-          attributeValues: inputProduct.attributeValues,
-          qtyBasisAttr:   inputProduct.attributeValues.find((av) => av.isQuantityBasis) ?? null,
+          id:              inputProduct.id,
+          name:            inputProduct.name,
+          groupName:       inputProduct.groupName,
+          sku:             inputProduct.sku,
+          attributeValues: inputAttrsForResult,
+          qtyBasisAttr:    inputAttrsForResult.find((av) => av.isQuantityBasis) ?? null,
         },
         baseQty,
         requiredQty,
         error: requiredQty == null
           ? 'Formula could not be evaluated — check that all attribute values are set on both products'
           : null,
-      };
+        subBom,
+      } satisfies InputResultBase;
     }),
   );
 
   return {
     outputProductId: outputProduct.id,
     outputProduct: {
-      id:             outputProduct.id,
-      name:           outputProduct.name,
-      groupName:      outputProduct.groupName,
-      sku:            outputProduct.sku,
+      id:              outputProduct.id,
+      name:            outputProduct.name,
+      groupName:       outputProduct.groupName,
+      sku:             outputProduct.sku,
       attributeValues: outputProduct.attributeValues,
-      qtyBasisAttr:   qtyBasisAv ?? null,
+      qtyBasisAttr:    qtyBasisAv ?? null,
     },
-    outputQty:   input.outputQty,
-    inputResults: inputResults.filter(Boolean),
+    outputQty,
+    inputResults: inputResults.filter((r): r is InputResultBase => r != null),
   };
+}
+
+// ─── public API ──────────────────────────────────────────────────────────────
+
+export async function calculateBom(input: BomCalculateInput) {
+  return calculateBomLevel(input.outputProductId, input.outputQty, input.inputs, 0);
 }
 
 // ─── get BOM inputs for a product ────────────────────────────────────────────

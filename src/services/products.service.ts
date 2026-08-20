@@ -1,16 +1,16 @@
 import { eq, asc } from 'drizzle-orm';
 import { db } from '../db/connection';
-import { products, productAttributeValues, productGroups, productGroupAttributes, attributes, productStock } from '../db/schema';
+import { products, productAttributeValues, productGroups, productGroupAttributes, attributes, productStock, productVariantInputs } from '../db/schema';
 import { AppError } from '../lib/app-error';
 
 // ─── formula evaluation ───────────────────────────────────────────────────────
 
-function deriveAlias(formulaAlias: string | null, attrName: string | null): string {
+export function deriveAlias(formulaAlias: string | null, attrName: string | null): string {
   if (formulaAlias) return formulaAlias;
   return (attrName ?? '').toLowerCase().replace(/\s+/g, '_');
 }
 
-function evalFormula(formula: string, vars: Record<string, number>): number | null {
+export function evalFormula(formula: string, vars: Record<string, number>): number | null {
   try {
     let expr = formula;
     for (const [name, val] of Object.entries(vars)) {
@@ -24,7 +24,7 @@ function evalFormula(formula: string, vars: Record<string, number>): number | nu
   }
 }
 
-function computeAttributeValues<T extends {
+export function computeAttributeValues<T extends {
   isQuantityBasis: boolean | null;
   isCalculated: boolean | null;
   isFromInput: boolean | null;
@@ -69,11 +69,17 @@ export interface AttributeValueInput {
   textValue?: string | null;
 }
 
+export interface VariantInputEntry {
+  productGroupInputId: string;
+  inputProductId:      string;
+}
+
 export interface CreateProductInput {
   name: string;
   sku?: string | null;
   description?: string | null;
   attributeValues: AttributeValueInput[];
+  variantInputs?: VariantInputEntry[];
 }
 
 export type UpdateProductInput = Partial<CreateProductInput>;
@@ -354,6 +360,16 @@ export async function createProduct(groupId: string, input: CreateProductInput) 
     );
   }
 
+  if (input.variantInputs && input.variantInputs.length > 0) {
+    await db.insert(productVariantInputs).values(
+      input.variantInputs.map((vi) => ({
+        outputProductId:     created.id,
+        productGroupInputId: vi.productGroupInputId,
+        inputProductId:      vi.inputProductId,
+      }))
+    );
+  }
+
   return getProductById(groupId, created.id);
 }
 
@@ -383,7 +399,33 @@ export async function updateProduct(groupId: string, productId: string, input: U
     }
   }
 
+  if (input.variantInputs !== undefined) {
+    await db.delete(productVariantInputs).where(eq(productVariantInputs.outputProductId, productId));
+    if (input.variantInputs.length > 0) {
+      await db.insert(productVariantInputs).values(
+        input.variantInputs.map((vi) => ({
+          outputProductId:     productId,
+          productGroupInputId: vi.productGroupInputId,
+          inputProductId:      vi.inputProductId,
+        }))
+      );
+    }
+  }
+
   return getProductById(groupId, productId);
+}
+
+// ─── get variant input selections for a product ───────────────────────────────
+
+export async function getVariantInputs(productId: string): Promise<VariantInputEntry[]> {
+  const rows = await db
+    .select({
+      productGroupInputId: productVariantInputs.productGroupInputId,
+      inputProductId:      productVariantInputs.inputProductId,
+    })
+    .from(productVariantInputs)
+    .where(eq(productVariantInputs.outputProductId, productId));
+  return rows;
 }
 
 // ─── delete ───────────────────────────────────────────────────────────────────

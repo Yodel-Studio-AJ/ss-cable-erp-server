@@ -1,7 +1,8 @@
 import { Response } from 'express';
 import { z } from 'zod';
 import {
-  listAllProducts, listProducts, getProductById, getProductWithGroup, createProduct, updateProduct, deleteProduct,
+  listAllProducts, listProducts, getProductById, getProductWithGroup,
+  createProduct, updateProduct, deleteProduct, getVariantInputs,
 } from '../services/products.service';
 import { AppError } from '../lib/app-error';
 import type { AuthRequest } from '../middleware/auth.middleware';
@@ -14,11 +15,17 @@ const attrValueSchema = z.object({
   textValue:               z.string().max(500).nullable().optional(),
 });
 
+const variantInputSchema = z.object({
+  productGroupInputId: z.string().uuid(),
+  inputProductId:      z.string().uuid(),
+});
+
 const createSchema = z.object({
   name:            z.string().min(1).max(255),
   sku:             z.string().max(100).nullable().optional(),
   description:     z.string().nullable().optional(),
   attributeValues: z.array(attrValueSchema).default([]),
+  variantInputs:   z.array(variantInputSchema).optional(),
 });
 
 const updateSchema = createSchema.partial().refine(
@@ -73,4 +80,9 @@ export async function updateHandler(req: AuthRequest, res: Response): Promise<vo
 export async function removeHandler(req: AuthRequest, res: Response): Promise<void> {
   try { await deleteProduct(req.params.id as string, req.params.productId as string); res.status(204).send(); }
   catch (err) { handleError(res, err, 'remove'); }
+}
+
+export async function getVariantInputsHandler(req: AuthRequest, res: Response): Promise<void> {
+  try { res.json(await getVariantInputs(req.params.productId as string)); }
+  catch (err) { handleError(res, err, 'getVariantInputs'); }
 }

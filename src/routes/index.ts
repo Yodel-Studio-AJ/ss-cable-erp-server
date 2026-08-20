@@ -9,6 +9,7 @@ import attendanceRoutes    from './attendance.routes';
 import customersRoutes     from './customers.routes';
 import vendorsRoutes        from './vendors.routes';
 import purchaseOrdersRoutes from './purchase-orders.routes';
+import bomRoutes            from './bom.routes';
 
 const router = Router();
 
@@ -22,5 +23,6 @@ router.use('/attendance',      attendanceRoutes);
 router.use('/customers',       customersRoutes);
 router.use('/vendors',         vendorsRoutes);
 router.use('/purchase-orders', purchaseOrdersRoutes);
+router.use('/bom',             bomRoutes);
 
 export default router;
