@@ -57,7 +57,6 @@ async function main() {
   console.log('✓ Removed redundant "Total Cross Section" PGA');
 
   // Print summary
-  const coreAttr = await productGroupAttributes.name; // just for confirmation
   console.log('\n✅ Copper Core attribute redesign complete');
   console.log('\nAttributes now:');
   console.log('  0. Length (qty_basis) — meters of core to produce');

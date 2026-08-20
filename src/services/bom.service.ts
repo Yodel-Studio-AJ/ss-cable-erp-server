@@ -3,6 +3,7 @@ import { db } from '../db/connection';
 import {
   products, productGroups, productGroupAttributes, productGroupInputs,
   productAttributeValues, attributes, productStock, productVariantInputs,
+  productPricing,
 } from '../db/schema';
 import { AppError } from '../lib/app-error';
 import { deriveAlias, evalFormula, computeAttributeValues } from './products.service';
@@ -31,10 +32,13 @@ async function loadProduct(productId: string, qtyOverride?: number) {
       name:           products.name,
       sku:            products.sku,
       stockQty:       productStock.quantityOnHand,
+      unitPrice:      productPricing.currentPrice,
+      pricingMethod:  productPricing.pricingMethod,
     })
     .from(products)
     .innerJoin(productGroups, eq(products.productGroupId, productGroups.id))
     .leftJoin(productStock, eq(productStock.productId, products.id))
+    .leftJoin(productPricing, eq(productPricing.productId, products.id))
     .where(eq(products.id, productId))
     .limit(1);
 
@@ -91,7 +95,7 @@ async function loadProduct(productId: string, qtyOverride?: number) {
       ({ formula, isFromInput, ...rest }) => ({
         ...rest,
         isFromInput,
-        formula: isFromInput ? formula : undefined,
+        formula: isFromInput ? formula : null,
       }),
     );
   }
@@ -104,6 +108,8 @@ async function loadProduct(productId: string, qtyOverride?: number) {
     groupName:      productRow.groupName,
     name:           productRow.name,
     sku:            productRow.sku,
+    unitPrice:      productRow.unitPrice ?? null,
+    pricingMethod:  productRow.pricingMethod ?? null,
     attributeValues,
     // Allow recomputing attrs with a different qty (e.g. requiredQty at BOM time)
     recomputeAttrs: (qty: number) => buildAttributeValues(qty),
@@ -268,6 +274,8 @@ type InputResultBase = {
     name:            string;
     groupName:       string;
     sku:             string | null;
+    unitPrice:       number | null;
+    pricingMethod:   string | null;
     attributeValues: ReturnType<typeof computeAttributeValues>;
     qtyBasisAttr:    ReturnType<typeof computeAttributeValues>[number] | null;
   };
@@ -284,6 +292,8 @@ export type BomLevel = {
     name:            string;
     groupName:       string;
     sku:             string | null;
+    unitPrice:       number | null;
+    pricingMethod:   string | null;
     attributeValues: ReturnType<typeof computeAttributeValues>;
     qtyBasisAttr:    ReturnType<typeof computeAttributeValues>[number] | null;
   };
@@ -309,7 +319,7 @@ async function calculateBomLevel(
   for (const s of inputSelections)       selectionMap[s.bomInputId]          = s.inputProductId;
 
   const inputResults = await Promise.all(
-    bomInputRows.map(async (bomInput) => {
+    bomInputRows.map(async (bomInput): Promise<InputResultBase | null> => {
       const inputProductId = selectionMap[bomInput.id];
       if (!inputProductId) return null;
 
@@ -355,6 +365,8 @@ async function calculateBomLevel(
           name:            inputProduct.name,
           groupName:       inputProduct.groupName,
           sku:             inputProduct.sku,
+          unitPrice:       inputProduct.unitPrice,
+          pricingMethod:   inputProduct.pricingMethod,
           attributeValues: inputAttrsForResult,
           qtyBasisAttr:    inputAttrsForResult.find((av) => av.isQuantityBasis) ?? null,
         },
@@ -375,6 +387,8 @@ async function calculateBomLevel(
       name:            outputProduct.name,
       groupName:       outputProduct.groupName,
       sku:             outputProduct.sku,
+      unitPrice:       outputProduct.unitPrice,
+      pricingMethod:   outputProduct.pricingMethod,
       attributeValues: outputProduct.attributeValues,
       qtyBasisAttr:    qtyBasisAv ?? null,
     },

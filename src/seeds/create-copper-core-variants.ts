@@ -66,7 +66,8 @@ async function upsertProduct(name: string, sku: string, groupId: string) {
   return created.id;
 }
 
-async function setPav(productId: string, pgaId: string, numericValue: string) {
+async function setPav(productId: string, pgaId: string, rawValue: string) {
+  const numericValue = parseFloat(rawValue) as unknown as number;
   const [existing] = await db.select({ id: productAttributeValues.id })
     .from(productAttributeValues)
     .where(and(

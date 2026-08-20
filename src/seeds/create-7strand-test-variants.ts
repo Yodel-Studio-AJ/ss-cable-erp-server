@@ -56,15 +56,16 @@ async function upsertProduct(name: string, sku: string) {
 }
 
 async function setPav(productId: string, pgaId: string, value: string) {
+  const num = parseFloat(value) as unknown as number;
   const [ex] = await db.select({ id: productAttributeValues.id }).from(productAttributeValues)
     .where(and(
       eq(productAttributeValues.productId, productId),
       eq(productAttributeValues.productGroupAttributeId, pgaId),
     )).limit(1);
   if (ex) {
-    await db.update(productAttributeValues).set({ numericValue: value }).where(eq(productAttributeValues.id, ex.id));
+    await db.update(productAttributeValues).set({ numericValue: num }).where(eq(productAttributeValues.id, ex.id));
   } else {
-    await db.insert(productAttributeValues).values({ productId, productGroupAttributeId: pgaId, numericValue: value });
+    await db.insert(productAttributeValues).values({ productId, productGroupAttributeId: pgaId, numericValue: num });
   }
 }
 

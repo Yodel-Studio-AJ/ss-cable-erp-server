@@ -127,10 +127,11 @@ async function upsertProduct(name: string, sku: string, groupId: string): Promis
 }
 
 async function setPav(productId: string, pgaId: string, value: string) {
+  const numericValue = parseFloat(value) as unknown as number;
   const [ex] = await db.select({ id: productAttributeValues.id }).from(productAttributeValues)
     .where(and(eq(productAttributeValues.productId, productId), eq(productAttributeValues.productGroupAttributeId, pgaId))).limit(1);
-  if (ex) await db.update(productAttributeValues).set({ numericValue: value }).where(eq(productAttributeValues.id, ex.id));
-  else await db.insert(productAttributeValues).values({ productId, productGroupAttributeId: pgaId, numericValue: value });
+  if (ex) await db.update(productAttributeValues).set({ numericValue }).where(eq(productAttributeValues.id, ex.id));
+  else await db.insert(productAttributeValues).values({ productId, productGroupAttributeId: pgaId, numericValue });
 }
 
 async function setVariantInput(outputProductId: string, bomInputId: string, inputProductId: string) {
