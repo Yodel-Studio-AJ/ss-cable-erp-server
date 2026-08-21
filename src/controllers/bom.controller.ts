@@ -18,6 +18,9 @@ const calculateSchema = z.object({
     bomInputId:     z.string().uuid(),
     inputProductId: z.string().uuid(),
   })).default([]),
+  // Optional attribute overrides for the output product (sandbox parallel BOM).
+  // Keys are productGroupAttributeIds (UUIDs); values are numeric or string overrides.
+  attrOverrides: z.record(z.string().uuid(), z.union([z.number(), z.string()])).optional(),
 });
 
 export async function calculateHandler(req: AuthRequest, res: Response): Promise<void> {

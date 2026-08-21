@@ -10,6 +10,7 @@ import customersRoutes     from './customers.routes';
 import vendorsRoutes        from './vendors.routes';
 import purchaseOrdersRoutes from './purchase-orders.routes';
 import bomRoutes            from './bom.routes';
+import quotesRoutes          from './quotes.routes';
 
 const router = Router();
 
@@ -24,5 +25,6 @@ router.use('/customers',       customersRoutes);
 router.use('/vendors',         vendorsRoutes);
 router.use('/purchase-orders', purchaseOrdersRoutes);
 router.use('/bom',             bomRoutes);
+router.use('/quotes',          quotesRoutes);
 
 export default router;

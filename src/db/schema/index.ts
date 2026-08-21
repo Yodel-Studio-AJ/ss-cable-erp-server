@@ -38,3 +38,7 @@ export * from './inventory/purchase-order-items';
 export * from './inventory/stock-batches';
 export * from './inventory/product-pricing';
 export * from './inventory/product-price-history';
+
+// sales
+export * from './sales/quotes';
+export * from './sales/quote-items';

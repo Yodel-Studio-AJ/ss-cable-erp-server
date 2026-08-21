@@ -196,3 +196,25 @@ All routes require `Bearer <accessToken>`.
 | POST | `/api/product-groups` | owner, admin | Create product group |
 | PATCH | `/api/product-groups/:id` | owner, admin | Update product group |
 | DELETE | `/api/product-groups/:id` | owner | Delete product group |
+
+---
+
+### Quotes — `src/routes/quotes.routes.ts` (2026-08-21)
+Sales quotes: link a customer to a set of products with qty + display name. Mirrors the
+Purchase Orders pattern (`purchase-orders.service.ts`) but with no stock/delivery side effects —
+quotes don't move inventory. Item `displayName` defaults to the product's name at add-time but is
+editable per line. Intended as the first step toward a future Work Order: an accepted quote's
+items are the natural seed data for one.
+
+Schema: `src/db/schema/sales/quotes.ts`, `src/db/schema/sales/quote-items.ts`.
+Service: `src/services/quotes.service.ts`. Status flow: `draft → sent → accepted | rejected | expired`
+(`draft` can also go straight to `rejected` to cancel a draft).
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/api/quotes?customerId=...` | any authenticated | List quotes, optionally filtered by customer |
+| GET | `/api/quotes/:id` | any authenticated | Get single quote with items |
+| POST | `/api/quotes` | owner, admin, floor_manager | Create quote (customer + items) |
+| PATCH | `/api/quotes/:id` | owner, admin, floor_manager | Update customer/notes/valid-until/status |
+| POST | `/api/quotes/:id/items` | owner, admin, floor_manager | Add a line (draft only) — used directly from the BOM calculator |
+| DELETE | `/api/quotes/:id/items/:itemId` | owner, admin, floor_manager | Remove a line (draft only) |

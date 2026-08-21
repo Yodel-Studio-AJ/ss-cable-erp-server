@@ -17,6 +17,9 @@ export interface BomCalculateInput {
     bomInputId:     string;
     inputProductId: string;
   }[];
+  /** Optional overrides for the output product's attribute values (pgaId → value).
+   *  Applied before formula evaluation so ratio / mix attrs affect input quantities. */
+  attrOverrides?: Record<string, number | string>;
 }
 
 // ─── load product with attributes + stock ────────────────────────────────────
@@ -307,8 +310,22 @@ async function calculateBomLevel(
   // explicit input selections (from caller); falls back to saved variant inputs if empty
   inputSelections: { bomInputId: string; inputProductId: string }[],
   depth:           number,  // to prevent infinite recursion
+  attrOverrides?:  Record<string, number | string>,
 ): Promise<BomLevel> {
   const outputProduct = await loadProduct(outputProductId);
+
+  // Apply caller-supplied attribute overrides (e.g. ratio/mix changes from the sandbox).
+  // Only applied at depth 0 so sub-BOM products are unaffected.
+  if (depth === 0 && attrOverrides && Object.keys(attrOverrides).length > 0) {
+    outputProduct.attributeValues = outputProduct.attributeValues.map((av) => {
+      const ov = attrOverrides[av.productGroupAttributeId];
+      if (ov === undefined) return av;
+      return typeof ov === 'number'
+        ? { ...av, numericValue: ov, computedValue: ov }
+        : { ...av, textValue: String(ov) };
+    });
+  }
+
   const bomInputRows  = await loadBomInputs(outputProduct.productGroupId);
   const qtyBasisAv    = outputProduct.attributeValues.find((av) => av.isQuantityBasis);
 
@@ -400,7 +417,7 @@ async function calculateBomLevel(
 // ─── public API ──────────────────────────────────────────────────────────────
 
 export async function calculateBom(input: BomCalculateInput) {
-  return calculateBomLevel(input.outputProductId, input.outputQty, input.inputs, 0);
+  return calculateBomLevel(input.outputProductId, input.outputQty, input.inputs, 0, input.attrOverrides);
 }
 
 // ─── get BOM inputs for a product ────────────────────────────────────────────
